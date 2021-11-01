@@ -39,6 +39,8 @@ class XhrTransportStream implements GrpcTransportStream {
   final StreamController<GrpcMessage> _incomingMessages = StreamController();
   final StreamController<List<int>> _outgoingMessages = StreamController();
 
+  int contentLength = 0;
+
   @override
   Stream<GrpcMessage> get incomingMessages => _incomingMessages.stream;
 
@@ -53,42 +55,49 @@ class XhrTransportStream implements GrpcTransportStream {
         request.headers.add(entry.key, entry.value);
       }
 
-      _outgoingMessages.stream.map(frame).listen((data) => request.add(data), cancelOnError: true, onDone: () {
-        request.close().then((HttpClientResponse response) {
-          if (response.statusCode == 200) {
-            final contentType = response.headers.contentType?.value;
+      _outgoingMessages.stream.map(frame).listen(
+          (data) {
+            contentLength += data.length;
+            request.add(data);
+          },
+          cancelOnError: true,
+          onDone: () {
+            request.contentLength = contentLength;
+            request.close().then((HttpClientResponse response) {
+              if (response.statusCode == 200) {
+                final contentType = response.headers.contentType?.value;
 
-            if (contentType == null) {
-              _onError(GrpcError.unavailable('XhrConnection missing Content-Type'), StackTrace.current);
-              return;
-            }
-            if (!_checkContentType(contentType)) {
-              _onError(GrpcError.unavailable('XhrConnection bad Content-Type $contentType'), StackTrace.current);
-              return;
-            }
+                if (contentType == null) {
+                  _onError(GrpcError.unavailable('XhrConnection missing Content-Type'), StackTrace.current);
+                  return;
+                }
+                if (!_checkContentType(contentType)) {
+                  _onError(GrpcError.unavailable('XhrConnection bad Content-Type $contentType'), StackTrace.current);
+                  return;
+                }
 
-            final httpHeaders = <String, String>{};
-            response.headers.forEach((name, values) {
-              httpHeaders[name] = values.join(',');
+                final httpHeaders = <String, String>{};
+                response.headers.forEach((name, values) {
+                  httpHeaders[name] = values.join(',');
+                });
+
+                final headers = GrpcMetadata(httpHeaders);
+                _incomingMessages.add(headers);
+
+                response.listen((buffer) {
+                  _incomingProcessor.add(Int8List.fromList(buffer).buffer);
+                }, onError: () {
+                  _onError(GrpcError.unavailable('XhrConnection connection-error'), StackTrace.current);
+                  terminate();
+                }, onDone: () {
+                  _incomingProcessor.close();
+                });
+              } else {
+                _onError(GrpcError.unavailable('XhrConnection status ${response.statusCode}'), StackTrace.current);
+                terminate();
+              }
             });
-
-            final headers = GrpcMetadata(httpHeaders);
-            _incomingMessages.add(headers);
-
-            response.listen((buffer) {
-              _incomingProcessor.add(Int8List.fromList(buffer).buffer);
-            }, onError: () {
-              _onError(GrpcError.unavailable('XhrConnection connection-error'), StackTrace.current);
-              terminate();
-            }, onDone: () {
-              _incomingProcessor.close();
-            });
-          } else {
-            _onError(GrpcError.unavailable('XhrConnection status ${response.statusCode}'), StackTrace.current);
-            terminate();
-          }
-        });
-      });
+          });
     });
 
     _incomingProcessor.stream
