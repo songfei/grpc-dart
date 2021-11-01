@@ -132,7 +132,7 @@ class XhrClientConnection extends ClientConnection {
   GrpcTransportStream makeRequest(String path, Duration? timeout, Map<String, String> metadata, ErrorHandler onRequestFailure,
       {required CallOptions callOptions}) {
     // gRPC-web headers.
-    if (_getContentTypeHeader(metadata) != null) {
+    if (_getContentTypeHeader(metadata) == null) {
       metadata['Content-Type'] = 'application/grpc-web+proto';
       metadata['X-User-Agent'] = 'grpc-web-dart/0.1';
       metadata['X-Grpc-Web'] = '1';
