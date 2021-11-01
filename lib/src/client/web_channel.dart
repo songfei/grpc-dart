@@ -15,7 +15,7 @@
 
 import 'channel.dart';
 import 'connection.dart';
-import 'transport/xhr_transport.dart';
+import 'transport/xhr_transport.dart' if (dart.library.io) 'transport/xhr_transport_io.dart';
 
 /// A channel to a grpc-web endpoint.
 class GrpcWebClientChannel extends ClientChannelBase {
