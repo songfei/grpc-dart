@@ -58,11 +58,12 @@ class XhrTransportStream implements GrpcTransportStream {
       _outgoingMessages.stream.map(frame).listen(
           (data) {
             contentLength += data.length;
+            request.contentLength = contentLength;
             request.add(data);
           },
           cancelOnError: true,
           onDone: () {
-            request.contentLength = contentLength;
+
             request.close().then((HttpClientResponse response) {
               if (response.statusCode == 200) {
                 final contentType = response.headers.contentType?.value;
